@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Document</title>
+    <link href="/bower_components/bootstrap/dist/css/bootstrap.css" rel="stylesheet">
+    <style>
+        #drop-zone{
+            height: 384px;
+            overflow:scroll;
+            padding: 10px;
+            box-shadow: inset 0px 0px 10px rgba(0,0,0,0.9);
+        }
+        .hidden {
+            display: none;
+        }
+        body {
+            margin-top: 50px;
+        }
+        #source {
+            word-wrap: normal;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row">
+            <div class="col-md-9" style="border: 1px solid black" id="drop-zone" contenteditable="true">
+                I am an editable text block.  Drag images into text box to automatically upload them to the server
+            </div>
+            <div class="col-md-3">
+                Embedded Images:
+                <ul id="linked-images">
+                </ul>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-10">
+                <pre>
+                <xmp id="source">
+                </xmp>
+                </pre>
+            </div>
+        </div>
+    </div>
+    <script src="js/load-image.all.min.js"></script>
+    <script>
+        var images = [];
+        var options = {};
+        options.maxWidth = 1024;
+        options.downsamplingRatio = 0.5;
+        options.canvas = true;
+        var dropzone = document.getElementById('drop-zone');
+        var source = document.getElementById('source');
+
+        dropzone.addEventListener('input',function () {
+            console.log('event fired');
+            source.innerHTML = dropzone.innerHTML.replace(/  /g,'');
+        },true);
+
+        dropzone.addEventListener("dragover", function(event) {
+            event.preventDefault();
+        }, true);
+        dropzone.addEventListener("paste", function(event) {
+            item = (event.clipboardData || event.originalEvent.clipboardData).items[0];
+            if (item.kind == 'file') {
+                event.preventDefault();
+                images.push(item.getAsFile());
+                uploadImages();
+            }
+        }, true);
+        dropzone.addEventListener("drop", function(event) {
+            event.preventDefault();
+            images = event.dataTransfer.files;
+            uploadImages();
+        }, true);
+        var uploadImages =  function() {
+            loadImage.parseMetaData(images[0], function(data) {
+                if (data.exif) {
+                    options.orientation = data.exif.get('Orientation');
+                }
+            });
+            var loadingImage = loadImage(
+                images[0],
+                function (img) {
+                    var fd = new FormData();
+                    fd.append("image",img.toDataURL("image/jpeg"));
+                    var xhr = new XMLHttpRequest();
+                    var res = {};
+                    xhr.open("POST","http://192.168.1.119:8000/upload.php");
+                    xhr.responseType = "json";
+                    xhr.onreadystatechange = function() {
+                        if (xhr.readyState == XMLHttpRequest.DONE) {
+                            res = xhr.response;
+                            var fs = document.createElement('img');
+                            fs.width = 256;
+                            fs.src = '/'+ res.img;
+                            var link = document.createElement('a');
+                            link.href = '/' + res.img;
+                            link.innerHTML = res.img;
+                            var item = document.createElement('li');
+                            item.appendChild(link);
+                            var list = document.getElementById('linked-images');
+                            list.appendChild(item);
+                            dropzone.appendChild(fs);
+                            dropzone.innerHTML += '\n';
+                            if ("createEvent" in document) {
+                                var evt = document.createEvent("HTMLEvents");
+                                evt.initEvent("input", false, true);
+                                dropzone.dispatchEvent(evt);
+                            }
+                            else
+                                dropzone.fireEvent("input");
+                        }
+                    };
+                    xhr.send(fd);
+                },
+                options
+            );
+        }
+    </script>
+</body>
+</html>
+
